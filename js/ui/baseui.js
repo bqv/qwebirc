@@ -59,7 +59,7 @@ qwebirc.ui.BaseUI = new Class({
     if(!this.firstClient) {
       this.firstClient = true;
       w.addLine("", "qwebirc v" + qwebirc.VERSION);
-      w.addLine("", "Copyright (C) 2008-2010 Chris Porter and the qwebirc project.");
+      w.addLine("", "Copyright (C) 2008-2012 Chris Porter and the qwebirc project.");
       w.addLine("", "http://www.qwebirc.org");
       w.addLine("", "Licensed under the GNU General Public License, Version 2.");
     }
@@ -113,6 +113,29 @@ qwebirc.ui.BaseUI = new Class({
   },  
   __setActiveWindow: function(window) {
     this.active = window;
+  },
+  renameWindow: function(window, name) {
+    if(this.getWindow(window.client, window.type, name))
+      return null;
+    
+    var clientId = this.getClientId(window.client);
+    var index = this.windowArray.indexOf(window);
+    if(index == -1)
+      return null;
+    
+    delete this.windows[clientId][window.identifier];
+    
+    var window = this.windowArray[index];
+    window.name = name;
+    window.identifier = this.getWindowIdentifier(window.client, window.type, window.name);
+    
+    this.windows[clientId][window.identifier] = this.windowArray[index];
+    
+    if(window.active)
+      this.updateTitle(window.name + " - " + this.options.appTitle);
+    
+    window.rename(window.name);
+    return window;
   },
   selectWindow: function(window) {
     if(this.active)
@@ -174,11 +197,7 @@ qwebirc.ui.BaseUI = new Class({
       tricked into getting themselves glined
     */
   loginBox: function(callback, initialNickname, initialChannels, autoConnect, autoNick) {
-    this.postInitialize();
-
-    this.addCustomWindow("Connection details", qwebirc.ui.ConnectPane, "connectpane", {
-      initialNickname: initialNickname, initialChannels: initialChannels, autoConnect: autoConnect, networkName: this.options.networkName, callback: callback, autoNick: autoNick
-    }, qwebirc.ui.WINDOW_CONNECT);
+    qwebirc.ui.GenericLoginBox(this.parentElement, callback, initialNickname, initialChannels, autoConnect, autoNick, this.options.networkName);
   },
   focusChange: function(newValue) {
     var window_ = this.getActiveWindow();
@@ -196,6 +215,15 @@ qwebirc.ui.StandardUI = new Class({
     this.tabCompleter = new qwebirc.ui.TabCompleterFactory(this);
     this.uiOptions = new qwebirc.ui.DefaultOptionsClass(this, options.uiOptionsArg);
     this.customWindows = {};
+    
+    this.__styleValues = {hue: this.uiOptions.STYLE_HUE, saturation: 0, lightness: 0};
+    if($defined(this.options.hue)) this.__styleValues.hue = this.options.hue;
+    if($defined(this.options.saturation)) this.__styleValues.saturation = this.options.saturation;
+    if($defined(this.options.lightness)) this.__styleValues.lightness = this.options.lightness;
+
+    if(this.options.thue !== null) this.__styleValues.textHue = this.options.thue;
+    if(this.options.tsaturation !== null) this.__styleValues.textSaturation = this.options.tsaturation;
+    if(this.options.tlightness !== null) this.__styleValues.textLightness = this.options.tlightness;
     
     var ev;
     if(Browser.Engine.trident) {
@@ -259,7 +287,7 @@ qwebirc.ui.StandardUI = new Class({
   newCustomWindow: function(name, select, type) {
     if(!type)
       type = qwebirc.ui.WINDOW_CUSTOM;
-
+      
     var w = this.newWindow(qwebirc.ui.CUSTOM_CLIENT, type, name);
     w.addEvent("close", function(w) {
       delete this.windows[qwebirc.ui.CUSTOM_CLIENT][w.identifier];
@@ -270,7 +298,7 @@ qwebirc.ui.StandardUI = new Class({
 
     return w;
   },
-  addCustomWindow: function(windowName, class_, cssClass, options, type) {
+  addCustomWindow: function(windowName, class_, cssClass, options) {
     if(!$defined(options))
       options = {};
       
@@ -279,7 +307,7 @@ qwebirc.ui.StandardUI = new Class({
       return;
     }
     
-    var d = this.newCustomWindow(windowName, true, type);
+    var d = this.newCustomWindow(windowName, true);
     this.customWindows[windowName] = d;
     
     d.addEvent("close", function() {
@@ -344,19 +372,40 @@ qwebirc.ui.StandardUI = new Class({
   },
   setModifiableStylesheet: function(name) {
     this.__styleSheet = new qwebirc.ui.style.ModifiableStylesheet(qwebirc.global.staticBaseURL + "css/" + name + qwebirc.FILE_SUFFIX + ".mcss");
-    
-    if($defined(this.options.hue)) {
-      this.setModifiableStylesheetValues(this.options.hue, 0, 0);
-    } else {
-      this.setModifiableStylesheetValues(this.uiOptions.STYLE_HUE, 0, 0);
-    }
+    this.setModifiableStylesheetValues({});
   },
-  setModifiableStylesheetValues: function(hue, saturation, lightness) {
+  setModifiableStylesheetValues: function(values) {
+    for(var k in values)
+      this.__styleValues[k] = values[k];
+      
     if(!$defined(this.__styleSheet))
       return;
-    this.__styleSheet.set(function(x) {
-      return x.setHue(hue).setSaturation(x.hsb[1] + saturation).setBrightness(x.hsb[2] + lightness);
-    });
+      
+    var back = {hue: this.__styleValues.hue, lightness: this.__styleValues.lightness, saturation: this.__styleValues.saturation};
+    var front = {hue: this.__styleValues.textHue, lightness: this.__styleValues.textLightness, saturation: this.__styleValues.textSaturation};
+
+    if(!this.__styleValues.textHue && !this.__styleValues.textLightness && !this.__styleValues.textSaturation)
+      front = back;
+
+    var colours = {
+      back: back,
+      front: front
+    };
+
+    this.__styleSheet.set(function() {
+      var mode = arguments[0];
+      if(mode == "c") {
+        var t = colours[arguments[2]];
+        var x = new Color(arguments[1]);
+        var c = x.setHue(t.hue).setSaturation(x.hsb[1] + t.saturation).setBrightness(x.hsb[2] + t.lightness);
+        if(c == "255,255,255") /* IE confuses white with transparent... */
+          c = "255,255,254";
+        
+        return "rgb(" + c + ")";
+      } else if(mode == "o") {
+        return this.uiOptions[arguments[1]] ? arguments[2] : arguments[3];
+      }
+    }.bind(this));
   }
 });
 
@@ -387,8 +436,24 @@ qwebirc.ui.NotificationUI = new Class({
   }
 });
 
-qwebirc.ui.QuakeNetUI = new Class({
+qwebirc.ui.NewLoginUI = new Class({
   Extends: qwebirc.ui.NotificationUI,
+  loginBox: function(callbackfn, initialNickname, initialChannels, autoConnect, autoNick) {
+    this.postInitialize();
+
+    /* I'd prefer something shorter and snappier! */
+    var w = this.newCustomWindow("Connection details", true, qwebirc.ui.WINDOW_CONNECT);
+    var callback = function(args) {
+      w.close();
+      callbackfn(args);
+    };
+    
+    qwebirc.ui.GenericLoginBox(w.lines, callback, initialNickname, initialChannels, autoConnect, autoNick, this.options.networkName);
+  }
+});
+
+qwebirc.ui.QuakeNetUI = new Class({
+  Extends: qwebirc.ui.NewLoginUI,
   urlDispatcher: function(name, window) {
     if(name == "qwhois") {
       return ["span", function(auth) {

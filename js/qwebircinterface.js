@@ -1,9 +1,11 @@
 function qwebirc_ui_onbeforeunload(e) { /* IE sucks */
-  var message = "This action will close all active IRC connections.";
-  var e = e || window.event;
-  if(e)
-    e.returnValue = message;
-  return message;
+  if(qwebirc.connected) {
+    var message = "This action will close all active IRC connections.";
+    var e = e || window.event;
+    if(e)
+      e.returnValue = message;
+    return message;
+  }
 }
 
 qwebirc.ui.Interface = new Class({
@@ -19,14 +21,25 @@ qwebirc.ui.Interface = new Class({
     theme: undefined,
     baseURL: null,
     hue: null,
+    saturation: null,
+    lightness: null,
+    thue: null,
+    tsaturation: null,
+    tlightness: null,
     uiOptionsArg: null,
+    nickValidation: null,
     dynamicBaseURL: "/",
     staticBaseURL: "/"
   },
   initialize: function(element, ui, options) {
-    qwebirc.global = {dynamicBaseURL: options.dynamicBaseURL, staticBaseURL: options.staticBaseURL}; /* HACK */
-
     this.setOptions(options);
+    
+    /* HACK */
+    qwebirc.global = {
+      dynamicBaseURL: options.dynamicBaseURL,
+      staticBaseURL: options.staticBaseURL,
+      nicknameValidator: $defined(options.nickValidation) ? new qwebirc.irc.NicknameValidator(options.nickValidation) : new qwebirc.irc.DummyNicknameValidator()
+    };
 
     window.addEvent("domready", function() {
       var callback = function(options) {
@@ -44,7 +57,13 @@ qwebirc.ui.Interface = new Class({
       
       if(this.options.searchURL) {
         var args = qwebirc.util.parseURI(String(document.location));
-        this.options.hue = this.getHueArg(args);
+        this.options.hue = this.getHueArg(args, "");
+        this.options.saturation = this.getSaturationArg(args, "");
+        this.options.lightness = this.getLightnessArg(args, "");
+
+        this.options.thue = this.getHueArg(args, "t");
+        this.options.tsaturation = this.getSaturationArg(args, "t");
+        this.options.tlightness = this.getLightnessArg(args, "t");
         
         if($defined(args["uio"]))
           this.options.uiOptionsArg = args["uio"];
@@ -117,14 +136,32 @@ qwebirc.ui.Interface = new Class({
       var details = ui_.loginBox(callback, inick, ichans, autoConnect, usingAutoNick);
     }.bind(this));
   },
-  getHueArg: function(args) {
-    var hue = args["hue"];
+  getHueArg: function(args, t) {
+    var hue = args[t + "hue"];
     if(!$defined(hue))
       return null;
     hue = parseInt(hue);
     if(hue > 360 || hue < 0)
       return null;
     return hue;
+  },
+  getSaturationArg: function(args, t) {
+    var saturation = args[t + "saturation"];
+    if(!$defined(saturation))
+      return null;
+    saturation = parseInt(saturation);
+    if(saturation > 100 || saturation < -100)
+      return null;
+    return saturation;
+  },
+  getLightnessArg: function(args, t) {
+    var lightness = args[t + "lightness"];
+    if(!$defined(lightness))
+      return null;
+    lightness = parseInt(lightness);
+    if(lightness > 100 || lightness < -100)
+      return null;
+    return lightness;
   },
   randSub: function(nick) {
     var getDigit = function() { return Math.floor(Math.random() * 10); }
