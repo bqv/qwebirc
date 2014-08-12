@@ -517,5 +517,10 @@ qwebirc.irc.BaseIRCClient = new Class({
     var host = params[0];
     this.silenced(host);
     return true;
+  },
+  irc_QWEBIRCIMAGE: function(prefix, params) {
+    var target = params[0];
+    var url = params.indexFromEnd(-1);
+    return this.qwebircImage(target, url);
   }
 });

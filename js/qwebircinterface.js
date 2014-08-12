@@ -34,11 +34,26 @@ qwebirc.ui.Interface = new Class({
   },
   initialize: function(element, ui, options) {
     this.setOptions(options);
+    var extractHost = function() {
+      var uri = document.location.origin + document.location.pathname;
+
+      if(QWEBIRC_DEBUG && uri.endsWith(".html")) {
+        var last = uri.lastIndexOf("/");
+        uri = uri.substring(0, last + 1);
+      }
+      if(uri.substr(uri.length - 1) != "/")
+        uri = uri + "/";
+
+      return uri;
+    };
+
+    options.baseURL = extractHost();
     
     /* HACK */
     qwebirc.global = {
       dynamicBaseURL: options.dynamicBaseURL,
       staticBaseURL: options.staticBaseURL,
+      baseURL: options.baseURL,
       helpURL: options.helpURL,
       nicknameValidator: $defined(options.nickValidation) ? new qwebirc.irc.NicknameValidator(options.nickValidation) : new qwebirc.irc.DummyNicknameValidator()
     };
