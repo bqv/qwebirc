@@ -5,7 +5,7 @@ qwebirc.irc.PMODE_REGULAR_MODE = 3;
 
 qwebirc.irc.RegisteredCTCPs = new QHash({
   "VERSION": function(x) {
-    return "qwebirc v" + qwebirc.VERSION + ", copyright (C) 2008-2014 Chris Porter and the qwebirc project -- " + qwebirc.util.browserVersion();
+    return "qwebirc v" + qwebirc.VERSION + ", copyright (C) 2008-2014 Chris Porter and the qwebirc project -- transport: " + this.connection.transportStatus + " -- " + qwebirc.util.browserVersion();
   },
   "USERINFO": function(x) { return "qwebirc"; },
   "TIME": function(x) { return qwebirc.irc.IRCDate(new Date()); },
@@ -240,9 +240,10 @@ qwebirc.irc.BaseIRCClient = new Class({
       var replyfn = qwebirc.irc.RegisteredCTCPs.get(type);
       if(replyfn) {
         var t = new Date().getTime() / 1000;
-        if(t > this.nextctcp)
-          this.send("NOTICE " + user.hostToNick() + " :\x01" + type + " " + replyfn(ctcp[1]) + "\x01");
-        this.nextctcp = t + 5;
+        if(t > this.nextctcp) {
+          this.send("NOTICE " + user.hostToNick() + " :\x01" + type + " " + replyfn.call(this, ctcp[1]) + "\x01");
+          this.nextctcp = t + 10;
+        }
       }
       
       if(target == this.nickname) {
@@ -516,5 +517,10 @@ qwebirc.irc.BaseIRCClient = new Class({
     var host = params[0];
     this.silenced(host);
     return true;
+  },
+  irc_QWEBIRCIMAGE: function(prefix, params) {
+    var target = params[0];
+    var url = params.indexFromEnd(-1);
+    return this.qwebircImage(target, url);
   }
 });
